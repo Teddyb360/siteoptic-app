@@ -38,7 +38,7 @@ if uploaded_file is not None:
         with st.spinner("Analyzing against NJ Codes..."):
             try:
                 # CONNECT TO GEMINI
-                model = genai.GenerativeModel('gemini-1.5-flash-latest')
+                model = genai.GenerativeModel('gemini-1.5-flash-001')
                 response = model.generate_content([system_prompt, image])
                 
                 # SHOW THE RESULT
