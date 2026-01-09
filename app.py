@@ -1,53 +1,32 @@
 import streamlit as st
 import google.generativeai as genai
-from PIL import Image
 
-# 1. CONFIGURE THE PAGE
-st.set_page_config(page_title="SiteOptic AI", page_icon="🏗️", layout="centered")
+st.title("SiteOptic Diagnostic 🛠️")
 
-# 2. HIDE THE API KEY (We will set this up in Step 3)
-# This looks for the key in the settings so it's not visible in the code
-api_key = st.secrets["GEMINI_API_KEY"]
-genai.configure(api_key=api_key)
+# 1. Setup the Key
+try:
+    api_key = st.secrets["GEMINI_API_KEY"]
+    genai.configure(api_key=api_key)
+    st.success("✅ API Key found.")
+except Exception as e:
+    st.error(f"❌ API Key Error: {e}")
 
-# 3. THE "BRAIN" (Your System Prompt)
-system_prompt = """
-You are "SiteOptic," a seasoned NJ Construction Foreman. 
-Your goal is to identify code violations and safety hazards in photos.
-RULES:
-1. Prioritize NJ Uniform Construction Code (UCC) and 2020 NEC.
-2. If you see a hazard, start with "⚠️ DANGER".
-3. Always end with: "Disclaimer: I am an AI, not a licensed official."
-"""
+# 2. Ask Google what models are available
+st.write("Asking Google for available models...")
 
-# 4. THE "BODY" (The Website Design)
-st.title("SiteOptic 🏗️")
-st.markdown("### The Digital Foreman in Your Pocket.")
-st.info("Built for New Jersey Pros. Snap a photo to check for code violations.")
+try:
+    # List all models
+    model_list = []
+    for m in genai.list_models():
+        # We only want models that can "generateContent" (chat)
+        if 'generateContent' in m.supported_generation_methods:
+            model_list.append(m.name)
+            st.code(m.name) # Print the name on screen
 
-# 5. THE CONNECTING PIECE (Camera/Upload)
-uploaded_file = st.file_uploader("Upload a site photo...", type=["jpg", "jpeg", "png"])
+    if not model_list:
+        st.warning("⚠️ No models found! Your API Key might be valid but has no permissions.")
+    else:
+        st.success(f"✅ Found {len(model_list)} models. The server can see them!")
 
-if uploaded_file is not None:
-    # Display the image
-    image = Image.open(uploaded_file)
-    st.image(image, caption="Site Photo", use_column_width=True)
-    
-    # The "Scan" Button
-    if st.button("Run SiteOptic Inspection"):
-        with st.spinner("Analyzing against NJ Codes..."):
-            try:
-                # CONNECT TO GEMINI
-                model = genai.GenerativeModel('gemini-1.5-flash-001')
-                response = model.generate_content([system_prompt, image])
-                
-                # SHOW THE RESULT
-                st.success("Inspection Complete")
-                st.markdown(response.text)
-                
-            except Exception as e:
-                st.error(f"Connection Error: {e}")
-
-# Footer
-st.markdown("---")
-st.caption("© 2026 SiteOptic AI. Not a substitute for professional inspection.")
+except Exception as e:
+    st.error(f"❌ Connection Error: {e}")
