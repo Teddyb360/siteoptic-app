@@ -10,40 +10,42 @@ try:
     api_key = st.secrets["GEMINI_API_KEY"]
     genai.configure(api_key=api_key)
 except Exception as e:
-    st.error("⚠️ API Key missing. Please check your Streamlit Advanced Settings.")
+    st.error("⚠️ API Key missing. Check Streamlit Advanced Settings.")
 
-# 3. THE "BRAIN" (System Prompt with ESTIMATOR LOGIC)
+# 3. THE "BRAIN" (Multi-Trade Home Depot Estimator)
 system_prompt = """
-You are "SiteOptic," an expert Construction Foreman and Project Estimator.
-Your goal is to inspect photos, identify issues, and create a ROUGH JOB ESTIMATE.
+You are "SiteOptic," an expert General Contractor and Estimator.
+Your goal is to inspect photos and generate a detailed Material & Labor estimate.
 
-*** PRIORITY KNOWLEDGE ***
-1. PLUMBING: NSPC standards.
-2. ELECTRICAL: 2020 NEC.
-3. BUILDING: 2021 IRC.
+*** PRICING SOURCE ***
+All material prices must be based on standard **HOME DEPOT** retail pricing. 
+Name specific brands carried there (e.g., Behr, Hampton Bay, Leviton, Ryobi, Carlon).
+
+*** TRADE KNOWLEDGE ***
+1. **PAINTING:** Estimate wall sq ft. Quote "Behr Premium Plus" gallons + roller/tape costs.
+2. **FRAMING:** Quote "2x4 KD Whitewood Studs". Estimate count based on 16" OC spacing.
+3. **PLUMBING/ELEC:** Follow NJ Codes (NSPC/NEC). Quote specific boxes/fittings.
+4. **GENERAL:** Flooring, Drywall, Finish Carpentry.
 
 *** OUTPUT FORMAT ***
-For every issue you find, you MUST provide this exact structure:
+For the photo provided, generate this Report:
 
-1. **[THE ISSUE]**: What is wrong and the Code Violation (if any).
-2. **[THE FIX]**: How to repair it properly.
-3. **[📋 JOB ESTIMATE]**:
-   - **Materials Needed**: List the parts (e.g., "2x4 studs, 1/2" drywall").
-   - **Material Cost**: Estimated range (e.g., "$50 - $75").
-   - **Labor Estimate**: Time to fix (e.g., "2-3 hours").
-   - **Total Budget**: A conservative range for the whole job.
+1. **[🧐 THE SCOPE]**: What needs to be done (Fixing, Building, or Painting).
+2. **[⚠️ CODE CHECK]**: Flag any NJ Code Violations (if applicable).
+3. **[🛒 HOME DEPOT CART]**:
+   - **Materials**: List specific items (e.g., "2 Gal Behr Ultra Pure White Satin").
+   - **Unit Price**: Est. price (e.g., "~$38.00/gal").
+   - **Subtotal**: Total for materials.
+4. **[👷 LABOR ESTIMATE]**:
+   - Hours needed vs. Difficulty.
+5. **[💰 GRAND TOTAL]**: A realistic Budget Range for the whole job.
 
-RULES:
-1. If you see a hazard, start with "⚠️ DANGER".
-2. Always end with: "Disclaimer: Estimates are based on national averages. Actual local prices may vary."
 """
 
-# 4. THE "BODY" (Marketing Text Updated)
+# 4. THE "BODY" (Updated Interface)
 st.title("SiteOptic 🏗️")
-st.markdown("### The Digital Foreman in Your Pocket.")
-
-# *** CHANGE: Broader Marketing Text ***
-st.info("Professional Grade. Snap a photo for code checks & instant job estimates.")
+st.markdown("### The Digital General Contractor")
+st.info("Snap a photo of ANY job (Framing, Paint, Electric) for a Home Depot price list.")
 
 # 5. THE CONNECTING PIECE
 uploaded_file = st.file_uploader("Upload a site photo...", type=["jpg", "jpeg", "png"])
@@ -52,18 +54,19 @@ if uploaded_file is not None:
     image = Image.open(uploaded_file)
     st.image(image, caption="Site Photo", use_column_width=True)
     
-    if st.button("Generate Estimate & Inspection"):
-        with st.spinner("Calculating Materials & Costs..."):
+    # We changed the button text to match the new features
+    if st.button("Get Price Estimate & Code Check"):
+        with st.spinner("Checking Home Depot Prices..."):
             try:
-                # Using the Gemini 2.5 Flash model
+                # Using the smart 2.5 Flash model
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 
                 response = model.generate_content([system_prompt, image])
-                st.success("Estimate Generated")
+                st.success("Estimate Ready")
                 st.markdown(response.text)
                 
             except Exception as e:
                 st.error(f"Error: {e}")
 
 st.markdown("---")
-st.caption("© 2026 SiteOptic AI. Estimates are for guidance only.")
+st.caption("© 2026 SiteOptic AI. Prices are estimates based on Home Depot averages.")
