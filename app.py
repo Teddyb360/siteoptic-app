@@ -1,6 +1,8 @@
 import streamlit as st
 import google.generativeai as genai
 from PIL import Image
+from fpdf import FPDF
+import tempfile
 
 # 1. PAGE CONFIGURATION
 st.set_page_config(page_title="SiteOptic Pro", page_icon="🏗️", layout="wide")
@@ -12,18 +14,17 @@ try:
 except Exception as e:
     st.error("⚠️ API Key missing. Check Streamlit Advanced Settings.")
 
-# 3. SIDEBAR SETTINGS (Language Toggle)
+# 3. SIDEBAR SETTINGS
 with st.sidebar:
     st.header("⚙️ Settings / Ajustes")
     spanish_mode = st.toggle("🇪🇸 Modo Español / Spanish Mode")
     st.markdown("---")
     st.markdown("### SiteOptic Pro")
-    st.caption("v6.0 - Multi-Trade & Bilingual")
+    st.caption("v7.0 - PDF Reports")
 
-# 4. DEFINE THE BRAIN (Dynamic System Prompt)
-# We change the instructions based on the sidebar toggle
+# 4. DEFINE THE BRAIN
 if spanish_mode:
-    language_instruction = "OUTPUT LANGUAGE: SPANISH (Español). Use NJ Construction terminology in Spanish."
+    language_instruction = "OUTPUT LANGUAGE: SPANISH (Español)."
 else:
     language_instruction = "OUTPUT LANGUAGE: ENGLISH."
 
@@ -37,26 +38,50 @@ Inspect the photo, identify code issues (NJ Codes), and estimate Home Depot cost
 *** OUTPUT SECTIONS ***
 You must provide the output in these 3 distinct sections:
 
-SECTION 1: 🧐 INSPECTION & CODES
+SECTION 1: INSPECTION & CODES
 - Identify scope of work.
 - Flag NJ Code Violations (NEC 2020, IRC 2021, NSPC).
-- If dangerous, start with "⚠️ DANGER".
+- If dangerous, start with "DANGER".
 
-SECTION 2: 📋 HOME DEPOT ESTIMATE
+SECTION 2: HOME DEPOT ESTIMATE
 - List Materials (Behr Paint, Ryobi tools, Lumber, etc.).
 - Material Cost ($).
 - Labor Hours estimate.
-- **TOTAL BUDGET RANGE**.
+- TOTAL BUDGET RANGE.
 
-SECTION 3: 📱 CLIENT TEXT DRAFT
-- Write a polite, professional text message (SMS) I can send to the homeowner.
-- Summarize the issue politely and give the price. 
-- Do NOT mention code violations aggressively; sound helpful.
-
+SECTION 3: CLIENT TEXT DRAFT
+- Write a polite text message for the homeowner.
 """
 
-# 5. SESSION STATE (The Memory)
-# This keeps the image and chat history from disappearing
+# PDF GENERATOR FUNCTION
+def create_pdf(text, image):
+    pdf = FPDF()
+    pdf.add_page()
+    pdf.set_font("Arial", size=12)
+    
+    # Title
+    pdf.set_font("Arial", style="B", size=16)
+    pdf.cell(200, 10, txt="SiteOptic Inspection Report", ln=True, align='C')
+    pdf.ln(10)
+    
+    # Add Image
+    if image:
+        # Save image to a temp file so PDF can read it
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".jpg") as tmp_file:
+            image.save(tmp_file.name)
+            # Resize image to fit page (width 100)
+            pdf.image(tmp_file.name, x=55, y=30, w=100)
+            pdf.ln(85) # Move cursor down past image
+
+    # Add Text (Cleaned of emojis to prevent crash)
+    pdf.set_font("Arial", size=10)
+    # Encode/Decode to handle special characters smoothly
+    clean_text = text.encode('latin-1', 'replace').decode('latin-1')
+    pdf.multi_cell(0, 10, txt=clean_text)
+    
+    return pdf.output(dest='S').encode('latin-1')
+
+# 5. SESSION STATE
 if "messages" not in st.session_state:
     st.session_state.messages = []
 if "last_image" not in st.session_state:
@@ -71,72 +96,68 @@ if spanish_mode:
 else:
     st.markdown("### The Digital General Contractor")
 
-# File Uploader
 uploaded_file = st.file_uploader("Upload Site Photo...", type=["jpg", "jpeg", "png"])
 
 if uploaded_file:
-    # Load and Display Image
     image = Image.open(uploaded_file)
     st.image(image, caption="Site Condition", width=400)
-    
-    # Save image to memory
     st.session_state.last_image = image
 
-    # THE ANALYZE BUTTON
     analyze_btn_text = "Analizar Obra" if spanish_mode else "Generate Estimate & Report"
     
     if st.button(analyze_btn_text, type="primary"):
-        with st.spinner("Analyzing... (Thinking in " + ("Spanish" if spanish_mode else "English") + ")"):
+        with st.spinner("Analyzing..."):
             try:
-                # Call Gemini
                 model = genai.GenerativeModel('gemini-2.5-flash')
                 response = model.generate_content([system_prompt, image])
                 
-                # Store the result in chat history
-                st.session_state.messages = [] # Clear old chat
+                st.session_state.messages = []
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
                 st.session_state.analysis_done = True
                 
             except Exception as e:
                 st.error(f"Error: {e}")
 
-# 7. DISPLAY RESULTS (Tabs & Chat)
+# 7. DISPLAY RESULTS
 if st.session_state.analysis_done:
-    
-    # Get the main analysis text
     main_response = st.session_state.messages[0]["content"]
     
-    # Create Tabs for cleaner view
+    # TABS
     tab1, tab2 = st.tabs(["📋 Inspection & Estimate", "📱 Client Text Draft"])
     
     with tab1:
         st.markdown(main_response)
         
+        # --- PDF DOWNLOAD BUTTON ---
+        st.markdown("---")
+        pdf_data = create_pdf(main_response, st.session_state.last_image)
+        st.download_button(
+            label="📄 Download Official PDF Report",
+            data=pdf_data,
+            file_name="SiteOptic_Report.pdf",
+            mime="application/pdf"
+        )
+        
     with tab2:
         st.info("Copy and paste this to your client:")
-        # We try to extract just the text message part, or user can copy from main text
-        st.code(main_response.split("CLIENT TEXT DRAFT")[-1], language="text")
+        st.code(main_response.split("SECTION 3")[-1], language="text")
 
+    # CHAT SECTION
     st.markdown("---")
-    st.subheader("💬 Chat with SiteOptic")
+    st.subheader("💬 Chat")
     
-    # Display Chat History
-    for message in st.session_state.messages[1:]: # Skip the first big report
+    for message in st.session_state.messages[1:]:
         with st.chat_message(message["role"]):
             st.markdown(message["content"])
 
-    # Chat Input
-    if prompt := st.chat_input("Ask a follow-up question (e.g., 'Is there a cheaper way?')..."):
-        # Add user message to chat
+    if prompt := st.chat_input("Ask a follow-up..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
         with st.chat_message("user"):
             st.markdown(prompt)
 
-        # Get AI Response
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
                 model = genai.GenerativeModel('gemini-2.5-flash')
-                # We send the image + the chat history so it knows context
                 chat_context = [system_prompt, st.session_state.last_image]
                 for msg in st.session_state.messages:
                     chat_context.append(msg["content"])
@@ -145,6 +166,5 @@ if st.session_state.analysis_done:
                 st.markdown(response.text)
                 st.session_state.messages.append({"role": "assistant", "content": response.text})
 
-# Footer
 st.markdown("---")
-st.caption("© 2026 SiteOptic AI. Estimates are for guidance only.")
+st.caption("© 2026 SiteOptic AI.")
